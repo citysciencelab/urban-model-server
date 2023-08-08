@@ -35,6 +35,7 @@ import os
 import click
 
 from flask import Flask, Blueprint, make_response, request, send_from_directory
+from flask_socketio import SocketIO, emit
 
 from pygeoapi.api import API
 from pygeoapi.util import get_mimetype, yaml_load, get_api_rules
@@ -54,6 +55,8 @@ if 'templates' in CONFIG['server']:
 
 APP = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
 APP.url_map.strict_slashes = API_RULES.strict_slashes
+
+SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=True, cors_allowed_origins="*")
 
 BLUEPRINT = Blueprint(
     'pygeoapi',
@@ -464,6 +467,12 @@ def stac_catalog_path(path):
     return get_response(api_.get_stac_path(request, path))
 
 
+@SOCKETAPP.on('connect')
+def test_connect():
+    SOCKETAPP.emit('after connect', {'data':'Yeehaw it works!'})
+
+
+
 APP.register_blueprint(BLUEPRINT)
 
 
@@ -482,7 +491,7 @@ def serve(ctx, server=None, debug=False):
     """
 
     # setup_logger(CONFIG['logging'])
-    APP.run(debug=True, host=api_.config['server']['bind']['host'],
+    SOCKETAPP.run(APP, host=api_.config['server']['bind']['host'],
             port=api_.config['server']['bind']['port'])
 
 

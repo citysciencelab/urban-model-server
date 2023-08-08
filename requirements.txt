@@ -2,6 +2,7 @@ Babel
 click
 filelock
 Flask
+flask_socketio
 importlib_metadata
 jinja2
 jsonschema
@@ -18,3 +19,4 @@ shapely<2.0
 SQLAlchemy<2.0.0
 tinydb
 unicodecsv
+
