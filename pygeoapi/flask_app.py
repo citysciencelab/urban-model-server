@@ -58,6 +58,9 @@ APP.url_map.strict_slashes = API_RULES.strict_slashes
 
 SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=True, cors_allowed_origins="*")
 
+conntected_processes = []
+
+
 BLUEPRINT = Blueprint(
     'pygeoapi',
     __name__,
@@ -388,7 +391,19 @@ def execute_process_jobs(process_id):
     :returns: HTTP response
     """
 
-    return get_response(api_.execute_process(request, process_id))
+    # Check if the process ID is in the list of connected processes
+    process = [x for x in conntected_processes if x['process_name'] == process_id]
+
+    print(request)
+
+    # If the process is connected, emit the data to the process
+    if len(process) > 0:
+        SOCKETAPP.emit('execute', "Testtest", to=process[0]['sid'])
+
+    
+    # Otherwise, execute the process
+    else:
+        return get_response(api_.execute_process(request, process_id))
 
 
 @BLUEPRINT.route('/jobs/<job_id>/results',
@@ -468,10 +483,26 @@ def stac_catalog_path(path):
 
 
 @SOCKETAPP.on('connect')
-def test_connect():
+def connect():
     SOCKETAPP.emit('after connect', {'data':'Yeehaw it works!'})
 
 
+@SOCKETAPP.on('register')
+def register(data):
+
+    # Add the process to the list of connected processes
+    conntected_processes.append({"process_name": data['process_name'], "sid": request.sid})
+
+    print(conntected_processes)
+
+    SOCKETAPP.emit('registration_success', {'data':'The registration was successful!'})
+
+@SOCKETAPP.on('disconnect')
+def disconnect_process():
+    # Remove the process from the list of connected processes
+    conntected_processes.remove([x for x in conntected_processes if x['sid'] == request.sid][0])
+    
+    print('Client disconnected')
 
 APP.register_blueprint(BLUEPRINT)
 
