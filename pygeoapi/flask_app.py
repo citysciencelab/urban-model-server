@@ -398,7 +398,9 @@ def execute_process_jobs(process_id):
 
     # If the process is connected, emit the data to the process
     if len(process) > 0:
-        SOCKETAPP.emit('execute', "Testtest", to=process[0]['sid'])
+        SOCKETAPP.emit('execute', request.get_json(), to=process[0]['sid'])
+
+        return get_response(request, process_id)
 
     
     # Otherwise, execute the process
@@ -501,7 +503,7 @@ def register(data):
 def disconnect_process():
     # Remove the process from the list of connected processes
     conntected_processes.remove([x for x in conntected_processes if x['sid'] == request.sid][0])
-    
+
     print('Client disconnected')
 
 APP.register_blueprint(BLUEPRINT)

@@ -3516,6 +3516,8 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE,
                                                **self.api_headers)
         if process_id not in self.manager.processes:
+
+
             msg = 'identifier not found'
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers,
