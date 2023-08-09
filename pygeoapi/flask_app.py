@@ -510,10 +510,15 @@ def register(data):
 @SOCKETAPP.on('disconnect')
 def disconnect_process():
 
+    for process in api_.manager.processes:
+        if 'sid' in api_.manager.processes[process] and api_.manager.processes[process]['sid'] == request.sid:
+            api_.manager.processes.pop(process)
+
     # Remove the process from the process manager
-    api_.manager.processes.pop([x for x in api_.manager.processes if api_.manager.processes[x]['sid'] == request.sid][0])
+    # api_.manager.processes.pop([x for x in api_.manager.processes if api_.manager.processes[x]['sid'] == request.sid][0])
 
     print('Client disconnected')
+    print(api_.manager.processes)
 
 APP.register_blueprint(BLUEPRINT)
 
