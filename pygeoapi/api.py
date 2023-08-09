@@ -3530,6 +3530,15 @@ class API:
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers,
                 request.format, 'NoSuchProcess', msg)
+        
+        process_type = "process"
+        sid = None
+        
+        # Check if process is a "normal" process or one connected with websockets
+        if self.manager.processes[process_id]["type"] == 'process-socket':
+            process_type = "process-socket"
+            sid = self.manager.processes[process_id]["sid"]
+        
 
         data = request.data
         if not data:
@@ -3569,7 +3578,7 @@ class API:
         try:
             LOGGER.debug('Executing process')
             result = self.manager.execute_process(
-                process_id, data_dict, execution_mode=execution_mode)
+                process_id, data_dict, execution_mode=execution_mode, process_type=process_type, sid=sid)
             job_id, mime_type, outputs, status, additional_headers = result
             headers.update(additional_headers or {})
             headers['Location'] = f'{self.base_url}/jobs/{job_id}'

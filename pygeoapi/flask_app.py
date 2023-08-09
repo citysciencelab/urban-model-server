@@ -391,18 +391,17 @@ def execute_process_jobs(process_id):
     """
 
     # Check if the process ID is in the list of processes
-    process = [x for x in api_.manager.processes if x == process_id]
+    #process = [x for x in api_.manager.processes if x == process_id]
 
     # If the process is connected, emit the data to the process
-    if len(process) > 0:
-        SOCKETAPP.emit('execute', request.get_json(), to=process[0]['sid'])
+    #if len(process) > 0:
+    #    SOCKETAPP.emit('execute', request.get_json(), to=process[0]['sid'])
 
-        return get_response(request, process_id)
+    #    return get_response(request, process_id)
 
     
     # Otherwise, execute the process
-    else:
-        return get_response(api_.execute_process(request, process_id))
+    return get_response(api_.execute_process(request, process_id))
 
 
 @BLUEPRINT.route('/jobs/<job_id>/results',
@@ -510,15 +509,15 @@ def register(data):
 @SOCKETAPP.on('disconnect')
 def disconnect_process():
 
+    # Remove the process from the process manager
     for process in api_.manager.processes:
         if 'sid' in api_.manager.processes[process] and api_.manager.processes[process]['sid'] == request.sid:
             api_.manager.processes.pop(process)
 
-    # Remove the process from the process manager
-    # api_.manager.processes.pop([x for x in api_.manager.processes if api_.manager.processes[x]['sid'] == request.sid][0])
 
     print('Client disconnected')
-    print(api_.manager.processes)
+
+
 
 APP.register_blueprint(BLUEPRINT)
 
