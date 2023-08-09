@@ -3289,9 +3289,18 @@ class API:
                         'InvalidParameterValue', msg)
 
             for key in relevant_processes:
-                p = self.manager.get_processor(key)
-                p2 = l10n.translate_struct(deepcopy(p.metadata),
-                                           request.locale)
+
+                p, p2 = None, None
+                
+                print(self.manager.processes[key])
+
+                # Check if process is a "normal" process or one connected with websockets
+                if "processor" in self.manager.processes[key]:
+                    p = self.manager.get_processor(key)
+                    p2 = l10n.translate_struct(deepcopy(p.metadata), request.locale)
+                elif "type" in self.manager.processes[key] and self.manager.processes[key]["type"] == 'process-socket':
+                    p2 = l10n.translate_struct(self.manager.processes[key]["metadata"], request.locale)
+                          
 
                 if process is None:
                     p2.pop('inputs')
@@ -3516,7 +3525,6 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE,
                                                **self.api_headers)
         if process_id not in self.manager.processes:
-
 
             msg = 'identifier not found'
             return self.get_exception(

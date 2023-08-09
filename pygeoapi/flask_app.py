@@ -56,9 +56,8 @@ if 'templates' in CONFIG['server']:
 APP = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
 APP.url_map.strict_slashes = API_RULES.strict_slashes
 
-SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=True, cors_allowed_origins="*")
+SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=False, cors_allowed_origins="*")
 
-conntected_processes = []
 
 
 BLUEPRINT = Blueprint(
@@ -391,10 +390,8 @@ def execute_process_jobs(process_id):
     :returns: HTTP response
     """
 
-    # Check if the process ID is in the list of connected processes
-    process = [x for x in conntected_processes if x['process_name'] == process_id]
-
-    print(request)
+    # Check if the process ID is in the list of processes
+    process = [x for x in api_.manager.processes if x == process_id]
 
     # If the process is connected, emit the data to the process
     if len(process) > 0:
@@ -492,17 +489,29 @@ def connect():
 @SOCKETAPP.on('register')
 def register(data):
 
-    # Add the process to the list of connected processes
-    conntected_processes.append({"process_name": data['process_name'], "sid": request.sid})
+    # Create a new process
+    new_process = {
+        data['id']: {
+            'type': 'process-socket',
+            'sid': request.sid,
+            'metadata': data
+        }
+    }
 
-    print(conntected_processes)
+    # Add process to the process manager
+    api_.manager.processes.update(new_process)
+                                   
+
+    print(api_.manager.processes)
+    # Returns OrderedDict([('hello-world', {'type': 'process', 'processor': {'name': 'HelloWorld'}}), ('citizen-ai', {'type': 'process-socket', 'sid': '3ECw2bXoTsf0gcxiAAAB'})])
 
     SOCKETAPP.emit('registration_success', {'data':'The registration was successful!'})
 
 @SOCKETAPP.on('disconnect')
 def disconnect_process():
-    # Remove the process from the list of connected processes
-    conntected_processes.remove([x for x in conntected_processes if x['sid'] == request.sid][0])
+
+    # Remove the process from the process manager
+    api_.manager.processes.pop([x for x in api_.manager.processes if api_.manager.processes[x]['sid'] == request.sid][0])
 
     print('Client disconnected')
 

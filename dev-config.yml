@@ -117,3 +117,8 @@ resources:
               format:
                     name: png
                     mimetype: image/png
+
+    hello-world:
+        type: process
+        processor:
+            name: HelloWorld   
