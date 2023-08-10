@@ -1,4 +1,14 @@
-# pygeoapi
+# Urban Model Server
+This is a modified instance of the [pygeoapi](https://pygeoapi.io) that can act as a server to host various urban models. It extends the functionalities of the pygeopai with a Websocket implementation. Different microservices/processes can connect with the pygeoapi via Websockets. The processes are then dynamically stored in the Urban Model Server instance and can be executed under the specific  ```/processes/<process-id>/execution``` endpoint. A job ID is created as usual and once the calculations are finished, the results are transferred back from the Microservices and stored under the ```/jobs/<job-id>/results``` endpoint.
+
+It is thus possible to connect multiple processing microservices with the Urban Model Server as long as the ```SOCKETAPP``` CORS settings allow for it. The microservices can be written in different programming languages and Dockerized environments with their respective packages. Dependency conflicts can thus be resolved. 
+
+The architecture of the Urban Model Server looks as following:
+
+
+
+
+## pygeoapi
 
 [![DOI](https://zenodo.org/badge/121585259.svg)](https://zenodo.org/badge/latestdoi/121585259)
 [![Build](https://github.com/geopython/pygeoapi/actions/workflows/main.yml/badge.svg)](https://github.com/geopython/pygeoapi/actions/workflows/main.yml)
