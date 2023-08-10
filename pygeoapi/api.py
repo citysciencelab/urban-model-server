@@ -681,6 +681,8 @@ class API:
         self.manager = get_manager(self.config)
         LOGGER.info('Process manager plugin loaded')
 
+        
+
     @gzip
     @pre_process
     @jsonldify
@@ -3684,6 +3686,31 @@ class API:
 
         return headers, HTTPStatus.OK, content
 
+
+    def get_websocket_results(self,
+                              job_id: str, 
+                              process_id: str, 
+                              results: dict, 
+                              mimetype: str) -> Tuple[str, Any, JobStatus]:
+        """
+        Handle websocket results
+        param job_id: job identifier
+        param process_id: process identifier
+        param results: results dictionary
+        param mimetype: mimetype of results
+
+        """
+
+        # Ensure results are a dict object
+        results_dict = {
+            "results" : results
+            }
+
+        
+        return self.manager.get_websocket_results(job_id, process_id, results_dict, mimetype)
+
+
+
     @pre_process
     def delete_job(
             self, request: Union[APIRequest, Any], job_id
@@ -4184,6 +4211,7 @@ class API:
                 content_crs_uri = DEFAULT_CRS
 
         headers['Content-Crs'] = f'<{content_crs_uri}>'
+
 
 
 def validate_bbox(value=None) -> list:

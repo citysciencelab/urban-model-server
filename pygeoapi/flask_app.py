@@ -80,6 +80,31 @@ APP.config['JSONIFY_PRETTYPRINT_REGULAR'] = CONFIG['server'].get(
 
 api_ = API(CONFIG)
 
+# Create a dict of open jobs that are running through Websockets
+WEBSOCKET_JOBS = {}
+
+def add_websocket_job(job_id: str, sid: str):
+    """
+    Add a job to the websocket jobs list
+
+    :param job_id: Job id
+    :param sid: Socket id
+    """
+    WEBSOCKET_JOBS[job_id] = sid
+
+    print(f'Added job {job_id} to websocket jobs list')
+
+def remove_websocket_job(job_id: str):
+    """
+    Remove a job from the websocket jobs list
+
+    :param job_id: Job id
+    """
+    WEBSOCKET_JOBS.pop(job_id, None)
+
+    print(f'Removed job {job_id} from websocket jobs list')
+
+
 OGC_SCHEMAS_LOCATION = CONFIG['server'].get('ogc_schemas_location')
 
 if (OGC_SCHEMAS_LOCATION is not None and
@@ -482,7 +507,7 @@ def stac_catalog_path(path):
 
 @SOCKETAPP.on('connect')
 def connect():
-    SOCKETAPP.emit('after connect', {'data':'Yeehaw it works!'})
+    print("Client connected: " + request.sid)
 
 
 @SOCKETAPP.on('register')
@@ -498,24 +523,42 @@ def register(data):
     }
 
     # Add process to the process manager
-    api_.manager.processes.update(new_process)
-                                   
+    api_.manager.processes.update(new_process)                                   
 
-    print(api_.manager.processes)
-    # Returns OrderedDict([('hello-world', {'type': 'process', 'processor': {'name': 'HelloWorld'}}), ('citizen-ai', {'type': 'process-socket', 'sid': '3ECw2bXoTsf0gcxiAAAB'})])
+    print("New process registered: " + data['id'])
 
-    SOCKETAPP.emit('registration_success', {'data':'The registration was successful!'})
+    SOCKETAPP.emit('registration_success', {'data':'The registration was successful!'}, to=request.sid)
 
 @SOCKETAPP.on('disconnect')
 def disconnect_process():
+
+    p = ""
 
     # Remove the process from the process manager
     for process in api_.manager.processes:
         if 'sid' in api_.manager.processes[process] and api_.manager.processes[process]['sid'] == request.sid:
             api_.manager.processes.pop(process)
+            #p = process["id"]
 
+    print('Client disconnected: ' + process)
 
-    print('Client disconnected')
+@SOCKETAPP.on('simulation_results')
+def simulation_results(data):
+
+    jobID = data['jobID']
+    processID = data['processID']
+    results = data['results']
+    mimetype = data['mimetype']
+
+    print('Simulation results received: ' + jobID)
+
+    # Process results
+    jfmt, outputs, current_status = api_.get_websocket_results(jobID, processID, results, mimetype)
+
+    print("The job was " + current_status.value)
+
+    # Remove websocket job
+    remove_websocket_job(jobID)
 
 
 

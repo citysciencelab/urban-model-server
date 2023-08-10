@@ -178,6 +178,38 @@ class BaseManager:
         """
 
         raise JobNotFoundError()
+    
+    def _execute_handler_websockets(self, job_id: str, data_dict: dict, sid: str, process_id: str) -> Tuple[str, None, JobStatus]:
+
+        LOGGER.debug('Websocket execution')
+        from pygeoapi.flask_app import SOCKETAPP
+
+        data_dict['jobID'] = job_id
+
+        current_status = JobStatus.accepted
+
+        job_metadata = {
+            'identifier': job_id,
+            'process_id': process_id,
+            'job_start_datetime': datetime.utcnow().strftime(
+                DATETIME_FORMAT),
+            'job_end_datetime': None,
+            'status': current_status.value,
+            'location': None,
+            'mimetype': None,
+            'message': 'Job accepted and ready for execution',
+            'progress': 5
+        }
+
+        self.add_job(job_metadata)
+
+        SOCKETAPP.emit('execute', data_dict, to=sid)
+
+        from pygeoapi.flask_app import add_websocket_job
+        add_websocket_job(job_id, sid)
+
+        return 'application/json', None, current_status
+    
 
     def _execute_handler_async(self, p: BaseProcessor, job_id: str,
                                data_dict: dict) -> Tuple[str, None, JobStatus]:
@@ -309,6 +341,8 @@ class BaseManager:
             self.update_job(job_id, job_metadata)
 
         return jfmt, outputs, current_status
+    
+
 
     def execute_process(
             self,
@@ -335,19 +369,26 @@ class BaseManager:
 
         job_id = str(uuid.uuid4())
 
+        
 
         # Check if process is connected via Websockets
         if process_type == 'process-socket':
-            LOGGER.debug('Websocket execution')
-            from pygeoapi.flask_app import SOCKETAPP
-            SOCKETAPP.emit('execute', data_dict, to=sid)
-
             
+            response_headers = {
+                    'Preference-Applied': (
+                        RequestedProcessExecutionMode.respond_async.value)
+                }
+            
+            mime_type, outputs, status = self._execute_handler_websockets(job_id, data_dict, sid, process_id)
+
+
+
+            return job_id, mime_type, outputs, status, response_headers
 
         # Otherwise, execute locally as normal
         else:
+            processor = BaseProcessor()
 
-            processor = self.get_processor(process_id)
             if execution_mode == RequestedProcessExecutionMode.respond_async:
                 job_control_options = processor.metadata.get(
                     'jobControlOptions', [])
@@ -382,9 +423,100 @@ class BaseManager:
                 response_headers = None
             # TODO: handler's response could also be allowed to include more HTTP
             # headers
+
             mime_type, outputs, status = handler(processor, job_id, data_dict)
             return job_id, mime_type, outputs, status, response_headers
 
+    
+    def get_websocket_results(self, 
+                              job_id: str, 
+                              process_id: str, 
+                              results: dict, 
+                              mimetype: str) -> Tuple[str, Any, JobStatus]:
+        #try:
+        
+        print("Manager received results")
+        print(results)
+
+
+        filename, mode, encoding = "", "", ""
+
+        if self.output_dir is not None:
+            filename = f"{process_id}-{job_id}"
+            job_filename = self.output_dir / filename
+        else:
+            job_filename = None
+
+        current_status = JobStatus.running
+
+        print(filename, mode, encoding, job_filename, current_status)
+
+        self.update_job(job_id, {
+            'status': current_status.value,
+            'message': 'Writing job output',
+            'progress': 95
+        })
+
+        if self.output_dir is not None:
+            LOGGER.debug(f'writing output to {job_filename}')
+            if isinstance(results, dict):
+                mode = 'w'
+                data = json.dumps(results, sort_keys=True, indent=4)
+                LOGGER.error(data)
+                encoding = 'utf-8'
+            elif isinstance(results, bytes):
+                mode = 'wb'
+                data = results
+                encoding = None
+            with job_filename.open(mode=mode, encoding=encoding) as fh:
+                fh.write(data)
+
+        current_status = JobStatus.successful
+
+        job_update_metadata = {
+            'job_end_datetime': datetime.utcnow().strftime(
+                DATETIME_FORMAT),
+            'status': current_status.value,
+            'location': str(job_filename),
+            'mimetype': mimetype,
+            'message': 'Job complete',
+            'progress': 100
+        }
+
+        self.update_job(job_id, job_update_metadata)
+
+        # except Exception as err:
+        #     # TODO assess correct exception type and description to help users
+        #     # NOTE, the /results endpoint should return the error HTTP status
+        #     # for jobs that failed, ths specification says that failing jobs
+        #     # must still be able to be retrieved with their error message
+        #     # intact, and the correct HTTP error status at the /results
+        #     # endpoint, even if the /result endpoint correctly returns the
+        #     # failure information (i.e. what one might assume is a 200
+        #     # response).
+
+        #     current_status = JobStatus.failed
+        #     code = 'InvalidParameterValue'
+        #     outputs = {
+        #         'code': code,
+        #         'description': 'Error updating job'
+        #     }
+        #     LOGGER.error(err)
+        #     job_metadata = {
+        #         'job_end_datetime': datetime.utcnow().strftime(
+        #             DATETIME_FORMAT),
+        #         'status': current_status.value,
+        #         'location': None,
+        #         'mimetype': None,
+        #         'message': f'{code}: {outputs["description"]}'
+        #     }
+
+        #     jfmt = 'application/json'
+
+        #     self.update_job(job_id, job_metadata)
+
+        return mimetype, results, current_status
+    
     def __repr__(self):
         return f'<BaseManager> {self.name}'
 
