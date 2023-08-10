@@ -3293,8 +3293,6 @@ class API:
             for key in relevant_processes:
 
                 p, p2 = None, None
-                
-                print(self.manager.processes[key])
 
                 # Check if process is a "normal" process or one connected with websockets
                 if "processor" in self.manager.processes[key]:

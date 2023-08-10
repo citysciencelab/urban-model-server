@@ -60,9 +60,9 @@ logging:
 metadata:
     identification:
         title:
-            en: City Science Lab Urban Model Platform
+            en: Urban Model Server
         description:
-            en: Various urban models developed in the "Connected Urban Twins" Project that can be accessed and executed via this API.
+            en: This is an Urban Model Server hosted by the City Science Lab at HafenCity University Hamburg, a collaboration with MIT Media Lab. One can find various urban models here, both spatially and non-spatially relevant. Most of them were developed in the "Connected Urban Twins" project.
         keywords:
             en:
                 - geospatial
@@ -90,34 +90,6 @@ metadata:
         email: rico.herzog@hcu-hamburg.de
 
 resources:
-    mapserver_world_map:
-        type: collection
-        title: MapServer demo WMS world map
-        description: MapServer demo WMS world map
-        keywords:
-            - MapServer
-            - world map
-        links:
-            - type: text/html
-              rel: canonical
-              title: information
-              href: https://demo.mapserver.org
-              hreflang: en-US
-        extents:
-            spatial:
-                bbox: [-180,-90,180,90]
-                crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
-        providers:
-            - type: map
-              name: WMSFacade
-              data: https://demo.mapserver.org/cgi-bin/msautotest
-              options:
-                  layer: world_latlong
-                  style: default
-              format:
-                    name: png
-                    mimetype: image/png
-
     hello-world:
         type: process
         processor:

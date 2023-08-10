@@ -181,13 +181,15 @@ info:
     email: rico.herzog@hcu-hamburg.de
     name: City Science Lab
     url: https://citysciencelab.hamburg
-  description: Various urban models developed in the "Connected Urban Twins" Project
-    that can be accessed and executed via this API.
+  description: This is an Urban Model Server hosted by the City Science Lab at HafenCity
+    University Hamburg, a collaboration with MIT Media Lab. One can find various urban
+    models here, both spatially and non-spatially relevant. Most of them were developed
+    in the "Connected Urban Twins" project.
   license:
     name: CC-BY 4.0 license
     url: https://creativecommons.org/licenses/by/4.0/
   termsOfService: https://creativecommons.org/licenses/by/4.0/
-  title: City Science Lab Urban Model Platform
+  title: Urban Model Server
   version: 0.16.dev0
   x-keywords:
   - geospatial
@@ -231,83 +233,6 @@ paths:
       summary: Collections
       tags:
       - server
-  /collections/mapserver_world_map:
-    get:
-      description: MapServer demo WMS world map
-      operationId: describeMapserver_world_mapCollection
-      parameters:
-      - $ref: '#/components/parameters/f'
-      - $ref: '#/components/parameters/lang'
-      responses:
-        '200':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/Collection
-        '400':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/InvalidParameter
-        '404':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/NotFound
-        '500':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/ServerError
-      summary: Get MapServer demo WMS world map metadata
-      tags:
-      - mapserver_world_map
-  /collections/mapserver_world_map/map:
-    get:
-      description: MapServer demo WMS world map map
-      operationId: getMap
-      parameters:
-      - $ref: '#/components/parameters/bbox'
-      - $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/parameters/datetime
-      - description: Response image width
-        explode: false
-        in: query
-        name: width
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Response image height
-        explode: false
-        in: query
-        name: height
-        required: false
-        schema:
-          type: integer
-        style: form
-      - description: Background transparency of map (default=true).
-        explode: false
-        in: query
-        name: transparent
-        required: false
-        schema:
-          default: true
-          type: boolean
-        style: form
-      - $ref: '#/components/parameters/bbox-crs-epsg'
-      - description: The optional f parameter indicates the output format which the
-          server shall provide as part of the response document.  The default format
-          is GeoJSON.
-        explode: false
-        in: query
-        name: f
-        required: false
-        schema:
-          default: png
-          enum:
-          - png
-          type: string
-        style: form
-      responses:
-        '200':
-          content:
-            application/json: {}
-          description: Response
-        '400':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/InvalidParameter
-        '500':
-          $ref: https://schemas.opengis.net/ogcapi/features/part1/1.0/openapi/ogcapi-features-1.yaml#/components/responses/ServerError
-      summary: Get map
-      tags:
-      - mapserver_world_map
   /conformance:
     get:
       description: API conformance definition
@@ -485,12 +410,16 @@ paths:
       tags:
       - hello-world
 servers:
-- description: Various urban models developed in the "Connected Urban Twins" Project
-    that can be accessed and executed via this API.
+- description: This is an Urban Model Server hosted by the City Science Lab at HafenCity
+    University Hamburg, a collaboration with MIT Media Lab. One can find various urban
+    models here, both spatially and non-spatially relevant. Most of them were developed
+    in the "Connected Urban Twins" project.
   url: http://localhost:5555
 tags:
-- description: Various urban models developed in the "Connected Urban Twins" Project
-    that can be accessed and executed via this API.
+- description: This is an Urban Model Server hosted by the City Science Lab at HafenCity
+    University Hamburg, a collaboration with MIT Media Lab. One can find various urban
+    models here, both spatially and non-spatially relevant. Most of them were developed
+    in the "Connected Urban Twins" project.
   externalDocs:
     description: information
     url: https://example.org
@@ -499,8 +428,6 @@ tags:
   name: jobs
 - description: SpatioTemporal Asset Catalog
   name: stac
-- description: MapServer demo WMS world map
-  name: mapserver_world_map
 - description: An example process that takes a name as input, and echoes it back as
     output. Intended to demonstrate a simple process with a single literal input.
   name: hello-world
