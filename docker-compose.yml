@@ -5,7 +5,7 @@ services:
     container_name: "CUT-Modelserver"
     build: .
     ports:
-      - "7777:5555"
+      - "8888:5555"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cut-modelserver.entrypoints=https"

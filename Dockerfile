@@ -22,4 +22,4 @@ RUN pygeoapi openapi generate $PYGEOAPI_CONFIG > example-openapi.yml
 
 EXPOSE 5555
 
-CMD [ "gunicorn", "--worker-class", "eventlet", "-w", "4", "--bind", "0.0.0.0:5555", "pygeoapi.flask_app:SOCKETAPP" ]
+CMD [ "gunicorn", "--worker-class", "eventlet", "-w", "4", "--bind", "0.0.0.0:5555", "pygeoapi.flask_app:APP" ]
