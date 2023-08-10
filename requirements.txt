@@ -2,7 +2,9 @@ Babel
 click
 filelock
 Flask
+Flask-Cors
 flask_socketio
+gunicorn
 importlib_metadata
 jinja2
 jsonschema
