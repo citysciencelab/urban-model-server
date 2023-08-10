@@ -433,87 +433,81 @@ class BaseManager:
                               process_id: str, 
                               results: dict, 
                               mimetype: str) -> Tuple[str, Any, JobStatus]:
-        #try:
+        try:
         
-        print("Manager received results")
-        print(results)
+            filename, mode, encoding = "", "", ""
 
+            if self.output_dir is not None:
+                filename = f"{process_id}-{job_id}"
+                job_filename = self.output_dir / filename
+            else:
+                job_filename = None
 
-        filename, mode, encoding = "", "", ""
+            current_status = JobStatus.running
 
-        if self.output_dir is not None:
-            filename = f"{process_id}-{job_id}"
-            job_filename = self.output_dir / filename
-        else:
-            job_filename = None
+            print(filename, mode, encoding, job_filename, current_status)
 
-        current_status = JobStatus.running
+            self.update_job(job_id, {
+                'status': current_status.value,
+                'message': 'Writing job output',
+                'progress': 95
+            })
 
-        print(filename, mode, encoding, job_filename, current_status)
+            if self.output_dir is not None:
+                LOGGER.debug(f'writing output to {job_filename}')
+                if isinstance(results, dict):
+                    mode = 'w'
+                    data = json.dumps(results, sort_keys=True, indent=4)
+                    LOGGER.error(data)
+                    encoding = 'utf-8'
+                elif isinstance(results, bytes):
+                    mode = 'wb'
+                    data = results
+                    encoding = None
+                with job_filename.open(mode=mode, encoding=encoding) as fh:
+                    fh.write(data)
 
-        self.update_job(job_id, {
-            'status': current_status.value,
-            'message': 'Writing job output',
-            'progress': 95
-        })
+            current_status = JobStatus.successful
 
-        if self.output_dir is not None:
-            LOGGER.debug(f'writing output to {job_filename}')
-            if isinstance(results, dict):
-                mode = 'w'
-                data = json.dumps(results, sort_keys=True, indent=4)
-                LOGGER.error(data)
-                encoding = 'utf-8'
-            elif isinstance(results, bytes):
-                mode = 'wb'
-                data = results
-                encoding = None
-            with job_filename.open(mode=mode, encoding=encoding) as fh:
-                fh.write(data)
+            job_update_metadata = {
+                'job_end_datetime': datetime.utcnow().strftime(
+                    DATETIME_FORMAT),
+                'status': current_status.value,
+                'location': str(job_filename),
+                'mimetype': mimetype,
+                'message': 'Job complete',
+                'progress': 100
+            }
 
-        current_status = JobStatus.successful
+            self.update_job(job_id, job_update_metadata)
 
-        job_update_metadata = {
-            'job_end_datetime': datetime.utcnow().strftime(
-                DATETIME_FORMAT),
-            'status': current_status.value,
-            'location': str(job_filename),
-            'mimetype': mimetype,
-            'message': 'Job complete',
-            'progress': 100
-        }
+        except Exception as err:
+            # TODO assess correct exception type and description to help users
+            # NOTE, the /results endpoint should return the error HTTP status
+            # for jobs that failed, ths specification says that failing jobs
+            # must still be able to be retrieved with their error message
+            # intact, and the correct HTTP error status at the /results
+            # endpoint, even if the /result endpoint correctly returns the
+            # failure information (i.e. what one might assume is a 200
+            # response).
 
-        self.update_job(job_id, job_update_metadata)
+            current_status = JobStatus.failed
+            code = 'InvalidParameterValue'
+            outputs = {
+                'code': code,
+                'description': 'Error updating job'
+            }
+            LOGGER.error(err)
+            job_metadata = {
+                'job_end_datetime': datetime.utcnow().strftime(
+                    DATETIME_FORMAT),
+                'status': current_status.value,
+                'location': None,
+                'mimetype': None,
+                'message': f'{code}: {outputs["description"]}'
+            }
 
-        # except Exception as err:
-        #     # TODO assess correct exception type and description to help users
-        #     # NOTE, the /results endpoint should return the error HTTP status
-        #     # for jobs that failed, ths specification says that failing jobs
-        #     # must still be able to be retrieved with their error message
-        #     # intact, and the correct HTTP error status at the /results
-        #     # endpoint, even if the /result endpoint correctly returns the
-        #     # failure information (i.e. what one might assume is a 200
-        #     # response).
-
-        #     current_status = JobStatus.failed
-        #     code = 'InvalidParameterValue'
-        #     outputs = {
-        #         'code': code,
-        #         'description': 'Error updating job'
-        #     }
-        #     LOGGER.error(err)
-        #     job_metadata = {
-        #         'job_end_datetime': datetime.utcnow().strftime(
-        #             DATETIME_FORMAT),
-        #         'status': current_status.value,
-        #         'location': None,
-        #         'mimetype': None,
-        #         'message': f'{code}: {outputs["description"]}'
-        #     }
-
-        #     jfmt = 'application/json'
-
-        #     self.update_job(job_id, job_metadata)
+            self.update_job(job_id, job_metadata)
 
         return mimetype, results, current_status
     

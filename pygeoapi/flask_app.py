@@ -509,25 +509,29 @@ def stac_catalog_path(path):
 def connect():
     print("Client connected: " + request.sid)
 
-
 @SOCKETAPP.on('register')
 def register(data):
 
-    # Create a new process
-    new_process = {
-        data['id']: {
-            'type': 'process-socket',
-            'sid': request.sid,
-            'metadata': data
+    try:
+        # Create a new process
+        new_process = {
+            data['id']: {
+                'type': 'process-socket',
+                'sid': request.sid,
+                'metadata': data
+            }
         }
-    }
 
-    # Add process to the process manager
-    api_.manager.processes.update(new_process)                                   
+        # Add process to the process manager
+        api_.manager.processes.update(new_process)                                   
 
-    print("New process registered: " + data['id'])
+        print("New process registered: " + data['id'])
 
-    SOCKETAPP.emit('registration_success', {'data':'The registration was successful!'}, to=request.sid)
+        SOCKETAPP.emit('registration_success', {'info':'The registration was successful!'}, to=request.sid)
+
+    except Exception as e:
+        print("Error registering process: " + str(e))
+        SOCKETAPP.emit('registration_error', {'info':'The registration was unsuccessful!'}, to=request.sid)
 
 @SOCKETAPP.on('disconnect')
 def disconnect_process():
@@ -538,27 +542,30 @@ def disconnect_process():
     for process in api_.manager.processes:
         if 'sid' in api_.manager.processes[process] and api_.manager.processes[process]['sid'] == request.sid:
             api_.manager.processes.pop(process)
-            #p = process["id"]
 
     print('Client disconnected: ' + process)
 
 @SOCKETAPP.on('simulation_results')
 def simulation_results(data):
+    try:
+        jobID = data['jobID']
+        processID = data['processID']
+        results = data['results']
+        mimetype = data['mimetype']
 
-    jobID = data['jobID']
-    processID = data['processID']
-    results = data['results']
-    mimetype = data['mimetype']
+        print('Simulation results received: ' + jobID)
 
-    print('Simulation results received: ' + jobID)
+        # Process results
+        jfmt, outputs, current_status = api_.get_websocket_results(jobID, processID, results, mimetype)
 
-    # Process results
-    jfmt, outputs, current_status = api_.get_websocket_results(jobID, processID, results, mimetype)
+        print("The job was " + current_status.value)
 
-    print("The job was " + current_status.value)
+        # Remove websocket job
+        remove_websocket_job(jobID)
+    
+    except:
+        print("Error processing simulation results")
 
-    # Remove websocket job
-    remove_websocket_job(jobID)
 
 
 
