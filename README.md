@@ -1,3 +1,5 @@
+![Urban Model Server_Banner](https://github.com/citysciencelab/urban-model-server/assets/61881523/e9df4caa-0bc2-42b9-a786-1e73d97337bf)
+
 # Urban Model Server
 This is a modified instance of the [pygeoapi](https://pygeoapi.io) that can act as a server to host various urban models. It extends the functionalities of the pygeopai with a Websocket implementation. Different microservices/processes can connect with the pygeoapi via Websockets. The processes are then dynamically stored in the Urban Model Server instance and can be executed under the specific  ```/processes/<process-id>/execution``` endpoint. A job ID is created as usual and once the calculations are finished, the results are transferred back from the Microservices and stored under the ```/jobs/<job-id>/results``` endpoint.
 
@@ -5,6 +7,7 @@ It is thus possible to connect multiple processing microservices with the Urban 
 
 The architecture of the Urban Model Server looks as following:
 
+![Urban Model Server Architektur](https://github.com/citysciencelab/urban-model-server/assets/61881523/a2c7f114-913a-4aaf-b153-97b6d16f1765)
 
 
 
