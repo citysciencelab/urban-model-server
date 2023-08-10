@@ -1,6 +1,7 @@
 Babel
 click
 filelock
+eventlet
 Flask
 Flask-Cors
 flask_socketio
