@@ -16,7 +16,10 @@ services:
       - "traefik.http.routers.cut-modelserver.middlewares=modelserver-authenticator@docker"
     networks:
       - proxy
+      - websocket-simulation
 
 networks:
   proxy:
+    external: true
+  websocket-simulation:
     external: true

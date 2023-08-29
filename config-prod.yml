@@ -31,14 +31,14 @@ server:
     bind:
         host: 0.0.0.0
         port: 5555
-    url: http://modelserver.cut.hcu-hamburg.de
+    url: https://modelserver.cut.hcu-hamburg.de
     mimetype: application/json; charset=UTF-8
     encoding: utf-8
     gzip: false
     languages:
         # First language is the default language
         - en-US
-    # cors: true
+    cors: true
     pretty_print: true
     limit: 10
     # templates:
