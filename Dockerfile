@@ -16,7 +16,7 @@ COPY . /app
 
 RUN python3 setup.py install
 
-ENV PYGEOAPI_CONFIG=config-dev.yml
+ENV PYGEOAPI_CONFIG=config-prod.yml
 
 RUN pygeoapi openapi generate $PYGEOAPI_CONFIG > example-openapi.yml
 
