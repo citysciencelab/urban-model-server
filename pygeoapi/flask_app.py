@@ -159,6 +159,7 @@ def get_response(result: tuple):
     
     # Add CORS headers
     response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Expose-Headers'] = 'Location'
 
     return response
 
