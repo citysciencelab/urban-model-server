@@ -154,6 +154,10 @@ def get_response(result: tuple):
     headers, status, content = result
     response = make_response(content, status)
 
+
+    # Add CORS headers
+    response.headers['Access-Control-Allow-Origin'] = '*'
+
     if headers:
         response.headers = headers
     return response
