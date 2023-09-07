@@ -74,6 +74,8 @@ if CONFIG['server'].get('cors', False):
 
         CORS_EXPOSE_HEADERS = ['Link', 'Content-Type', 'Location']
         CORS_RESOURCES = {r'/processes/*': {'origins': '*',
+                                        'expose_headers': CORS_EXPOSE_HEADERS}, 
+                                        r'/jobs/*': {'origins': '*',
                                         'expose_headers': CORS_EXPOSE_HEADERS}}  
         
         CORS(APP, resources=CORS_RESOURCES)
@@ -158,8 +160,8 @@ def get_response(result: tuple):
         response.headers = headers
     
     # Add CORS headers
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Expose-Headers'] = 'Location'
+    # response.headers['Access-Control-Allow-Origin'] = '*'
+    # response.headers['Access-Control-Expose-Headers'] = 'Location'
 
     return response
 
