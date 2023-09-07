@@ -12,8 +12,8 @@ services:
       - "traefik.http.routers.cut-modelserver.tls=true"
       - "traefik.http.routers.cut-modelserver.tls.certresolver=lets-encr"
       - "traefik.http.routers.cut-modelserver.rule=Host(`modelserver.cut.hcu-hamburg.de`)"
-      - "traefik.http.middlewares.modelserver-authenticator.basicauth.users=cut:$$2a$$12$$UEdt/AT9zZDaqBHlXMROsebOXlet6nQH7eAAgeWtXfnP/gxyadb9m "
-      - "traefik.http.routers.cut-modelserver.middlewares=modelserver-authenticator@docker"
+      - "traefik.http.middlewares.ratelimiter.ratelimit.average=500"
+      - "traefik.http.routers.cut-modelserver.middlewares=ratelimiter@docker"
     networks:
       - proxy
       - websocket-simulation
