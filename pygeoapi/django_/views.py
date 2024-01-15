@@ -39,6 +39,7 @@ from typing import Tuple, Dict, Mapping, Optional
 from django.conf import settings
 from django.http import HttpRequest, HttpResponse
 
+from pygeoapi.admin import Admin
 from pygeoapi.api import API
 
 
@@ -543,11 +544,10 @@ def _feed_response(request: HttpRequest, api_definition: str,
                    *args, **kwargs) -> Tuple[Dict, int, str]:
     """Use pygeoapi api to process the input request"""
 
-    if 'admin' in api_definition and settings.PYGEOAPI_CONFIG['server'].get('admin'):  # noqa
-        from pygeoapi.admin import Admin
-        api_ = Admin(settings.PYGEOAPI_CONFIG)
-    else:
+    if 'admin' not in api_definition:
         api_ = API(settings.PYGEOAPI_CONFIG)
+    else:
+        api_ = Admin(settings.PYGEOAPI_CONFIG)
 
     api = getattr(api_, api_definition)
 

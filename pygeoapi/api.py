@@ -680,8 +680,6 @@ class API:
         self.manager = get_manager(self.config)
         LOGGER.info('Process manager plugin loaded')
 
-        
-
     @gzip
     @pre_process
     @jsonldify
@@ -3110,7 +3108,6 @@ class API:
                         'InvalidParameterValue', msg)
 
             for key in relevant_processes:
-
                 p, p2 = None, None
 
                 # Check if process is a "normal" process or one connected with websockets
@@ -3119,7 +3116,7 @@ class API:
                     p2 = l10n.translate_struct(deepcopy(p.metadata), request.locale)
                 elif "type" in self.manager.processes[key] and self.manager.processes[key]["type"] == 'process-socket':
                     p2 = l10n.translate_struct(self.manager.processes[key]["metadata"], request.locale)
-                          
+                p2['id'] = key
 
                 if process is None:
                     p2.pop('inputs')
@@ -3344,7 +3341,6 @@ class API:
         headers = request.get_response_headers(SYSTEM_LOCALE,
                                                **self.api_headers)
         if process_id not in self.manager.processes:
-
             msg = 'identifier not found'
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers,
@@ -3396,8 +3392,8 @@ class API:
             execution_mode = None
         try:
             LOGGER.debug('Executing process')
-            result = self.manager.execute_process(
-                process_id, data_dict, execution_mode=execution_mode, process_type=process_type, sid=sid)
+            print(self.manager.execute_process)
+            result = self.manager.execute_process(process_id, data_dict, execution_mode, process_type, sid)
             job_id, mime_type, outputs, status, additional_headers = result
             headers.update(additional_headers or {})
             headers['Location'] = f'{self.base_url}/jobs/{job_id}'
@@ -3853,29 +3849,9 @@ class API:
             if request.format == F_HTML:  # render
                 content['path'] = path
                 if 'assets' in content:  # item view
-                    if content['type'] == 'Collection':
-                        content = render_j2_template(
-                            self.tpl_config,
-                            'stac/collection_base.html',
-                            content,
-                            request.locale
-                        )
-                    elif content['type'] == 'Feature':
-                        content = render_j2_template(
-                            self.tpl_config,
-                            'stac/item.html',
-                            content,
-                            request.locale
-                        )
-                    else:
-                        msg = f'Unknown STAC type {content.type}'
-                        LOGGER.error(msg)
-                        return self.get_exception(
-                            HTTPStatus.INTERNAL_SERVER_ERROR,
-                            headers,
-                            request.format,
-                            'NoApplicableCode',
-                            msg)
+                    content = render_j2_template(self.tpl_config,
+                                                 'stac/item.html',
+                                                 content, request.locale)
                 else:
                     content = render_j2_template(self.tpl_config,
                                                  'stac/catalog.html',
@@ -4030,7 +4006,6 @@ class API:
                 content_crs_uri = DEFAULT_CRS
 
         headers['Content-Crs'] = f'<{content_crs_uri}>'
-
 
 
 def validate_bbox(value=None) -> list:

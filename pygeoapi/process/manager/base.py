@@ -52,8 +52,6 @@ from pygeoapi.util import (
     RequestedProcessExecutionMode,
 )
 
-#from pygeoapi.flask_app import SOCKETAPP
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -97,11 +95,19 @@ class BaseManager:
         """
 
         try:
+            print(self.processes[process_id])
             process_conf = self.processes[process_id]
         except KeyError as err:
             raise UnknownProcessError('Invalid process identifier') from err
         else:
-            return load_plugin('process', process_conf['processor'])
+            # See if type is process-socket  
+            if self.processes[process_id]['type'] == 'process-socket':
+
+                return self.processes[process_id]
+            
+            # Otherwise, return a normal process
+            else:   
+                return load_plugin('process', process_conf['processor'])
 
     def get_jobs(self, status: JobStatus = None) -> list:
         """
@@ -359,6 +365,8 @@ class BaseManager:
         :param data_dict: `dict` of data parameters
         :param execution_mode: `str` optionally specifying sync or async
         processing.
+        :param process_type: `str` optionally specifying process type
+        :param sid: `str` optionally specifying websocket session ID
 
         :raises: UnknownProcessError if the input process_id does not
                  correspond to a known process

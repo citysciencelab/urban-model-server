@@ -9,6 +9,7 @@ gunicorn
 importlib_metadata
 jinja2
 jsonschema
+jsonpatch
 pydantic
 pygeofilter
 pygeoif
@@ -23,4 +24,3 @@ SQLAlchemy<2.0.0
 tinydb
 typing-extensions
 unicodecsv
-

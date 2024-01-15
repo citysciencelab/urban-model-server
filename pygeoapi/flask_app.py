@@ -37,6 +37,7 @@ import click
 from flask import Flask, Blueprint, make_response, request, send_from_directory
 from flask_socketio import SocketIO, emit
 
+from pygeoapi.admin import Admin
 from pygeoapi.api import API
 from pygeoapi.openapi import load_openapi_document
 from pygeoapi.config import get_config
@@ -47,9 +48,6 @@ CONFIG = get_config()
 OPENAPI = load_openapi_document()
 
 API_RULES = get_api_rules(CONFIG)
-
-if CONFIG['server'].get('admin'):
-    from pygeoapi.admin import Admin
 
 STATIC_FOLDER = 'static'
 if 'templates' in CONFIG['server']:
@@ -90,7 +88,7 @@ if CONFIG['server'].get('cors', False):
 APP.config['JSONIFY_PRETTYPRINT_REGULAR'] = CONFIG['server'].get(
     'pretty_print', True)
 
-api_ = API(CONFIG)
+api_ = API(CONFIG, OPENAPI)
 
 # Create a dict of open jobs that are running through Websockets
 WEBSOCKET_JOBS = {}
@@ -426,17 +424,6 @@ def execute_process_jobs(process_id):
     :returns: HTTP response
     """
 
-    # Check if the process ID is in the list of processes
-    #process = [x for x in api_.manager.processes if x == process_id]
-
-    # If the process is connected, emit the data to the process
-    #if len(process) > 0:
-    #    SOCKETAPP.emit('execute', request.get_json(), to=process[0]['sid'])
-
-    #    return get_response(request, process_id)
-
-    
-    # Otherwise, execute the process
     return get_response(api_.execute_process(request, process_id))
 
 
@@ -578,6 +565,62 @@ def simulation_results(data):
         print("Error processing simulation results")
 
 
+
+
+@ADMIN_BLUEPRINT.route('/admin/config', methods=['GET', 'PUT', 'PATCH'])
+def admin_config():
+    """
+    Admin endpoint
+
+    :returns: HTTP response
+    """
+
+    if request.method == 'GET':
+        return get_response(admin_.get_config(request))
+
+    elif request.method == 'PUT':
+        return get_response(admin_.put_config(request))
+
+    elif request.method == 'PATCH':
+        return get_response(admin_.patch_config(request))
+
+
+@ADMIN_BLUEPRINT.route('/admin/config/resources', methods=['GET', 'POST'])
+def admin_config_resources():
+    """
+    Resources endpoint
+
+    :returns: HTTP response
+    """
+
+    if request.method == 'GET':
+        return get_response(admin_.get_resources(request))
+
+    elif request.method == 'POST':
+        return get_response(admin_.post_resource(request))
+
+
+@ADMIN_BLUEPRINT.route(
+    '/admin/config/resources/<resource_id>',
+    methods=['GET', 'PUT', 'PATCH', 'DELETE'])
+def admin_config_resource(resource_id):
+    """
+    Resource endpoint
+
+    :returns: HTTP response
+    """
+
+    if request.method == 'GET':
+        return get_response(admin_.get_resource(request, resource_id))
+
+    elif request.method == 'DELETE':
+        return get_response(admin_.delete_resource(request, resource_id))
+
+    elif request.method == 'PUT':
+        return get_response(admin_.put_resource(request, resource_id))
+
+    elif request.method == 'PATCH':
+        return get_response(admin_.patch_resource(request, resource_id))
 
 
 APP.register_blueprint(BLUEPRINT)
