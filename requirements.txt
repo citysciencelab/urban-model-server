@@ -9,7 +9,7 @@ gunicorn
 importlib_metadata
 jinja2
 jsonschema
-pydantic<2.0
+pydantic
 pygeofilter
 pygeoif
 pyproj
@@ -21,5 +21,6 @@ requests
 shapely<2.0
 SQLAlchemy<2.0.0
 tinydb
+typing-extensions
 unicodecsv
 

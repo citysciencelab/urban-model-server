@@ -15,11 +15,12 @@ pygeoapi core record providers are listed below, along with a matrix of supporte
 parameters.
 
 .. csv-table::
-   :header: Provider, properties (filters), resulttype, q, bbox, datetime, sortby, properties (display), transactions
+   :header: Provider, properties (filters), resulttype, q, bbox, datetime, sortby, properties (display), CQL, transactions
    :align: left
 
-   `ElasticsearchCatalogue`_,✅,results/hits,✅,✅,✅,✅,❌
-   `TinyDBCatalogue`_,✅,results/hits,✅,✅,✅,✅,✅
+   `ElasticsearchCatalogue`_,✅,results/hits,✅,✅,✅,✅,✅,✅
+   `TinyDBCatalogue`_,✅,results/hits,✅,✅,✅,✅,❌,✅
+   `CSWFacade`_,✅,results/hits,✅,✅,✅,❌,❌,❌
 
 
 Below are specific connection examples based on supported providers.
@@ -50,6 +51,11 @@ To publish an Elasticsearch index, the following are required in your index:
          id_field: identifier
          time_field: datetimefield
 
+The ES provider also has the support for the CQL queries as indicated in the table above.
+
+.. seealso::
+  :ref:`cql` for more details on how to use Common Query Language (CQL) to filter the collection with specific queries.
+
 TinyDBCatalogue
 ^^^^^^^^^^^^^^^
 
@@ -69,6 +75,25 @@ To publish a TinyDB index, the following are required in your index:
          data: /path/to/file.db
          id_field: identifier
          time_field: datetimefield
+
+CSWFacade
+^^^^^^^^^
+
+.. note::
+   Requires Python package `OWSLib`_
+
+To publish a CSW using pygeoapi, the CSW base URL (`data`) is required.  Note that the
+CSW Record core model is supported as a baseline.
+
+.. code-block:: yaml
+
+   providers:
+       - type: record
+         name: CSWFacade
+         data: https://demo.pycsw.org/cite/csw
+         id_field: identifier
+         time_field: datetime
+         title_field: title
 
 
 Metadata search examples
@@ -103,3 +128,4 @@ Metadata search examples
 
 .. _`OGC API - Records`: https://ogcapi.ogc.org/records
 .. _`OGC API - Records GeoJSON Features`: https://raw.githubusercontent.com/opengeospatial/ogcapi-records/master/core/openapi/schemas/recordGeoJSON.yaml
+.. _`OWSLib`: https://geopython.github.io/OWSLib

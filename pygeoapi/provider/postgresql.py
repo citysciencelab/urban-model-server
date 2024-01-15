@@ -55,6 +55,7 @@ from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is nee
 from geoalchemy2.functions import ST_MakeEnvelope
 from geoalchemy2.shape import to_shape
 from pygeofilter.backends.sqlalchemy.evaluate import to_filter
+import pygeofilter.ast
 import pyproj
 import shapely
 from sqlalchemy import create_engine, MetaData, PrimaryKeyConstraint, asc, desc
@@ -103,7 +104,10 @@ class PostgreSQLProvider(BaseProvider):
         LOGGER.debug(f'Geometry field: {self.geom}')
 
         # Read table information from database
-        self._store_db_parameters(provider_def['data'])
+        options = None
+        if provider_def.get('options'):
+            options = provider_def['options']
+        self._store_db_parameters(provider_def['data'], options)
         self._engine, self.table_model = self._get_engine_and_table_model()
         LOGGER.debug(f'DB connection: {repr(self._engine.url)}')
         self.fields = self.get_fields()
@@ -135,7 +139,8 @@ class PostgreSQLProvider(BaseProvider):
 
         LOGGER.debug('Preparing filters')
         property_filters = self._get_property_filters(properties)
-        cql_filters = self._get_cql_filters(filterq)
+        modified_filterq = self._modify_pygeofilter(filterq)
+        cql_filters = self._get_cql_filters(modified_filterq)
         bbox_filter = self._get_bbox_filter(bbox)
         order_by_clauses = self._get_order_by_clauses(sortby, self.table_model)
         selected_properties = self._select_properties_clause(select_properties,
@@ -267,13 +272,14 @@ class PostgreSQLProvider(BaseProvider):
 
         return feature
 
-    def _store_db_parameters(self, parameters):
+    def _store_db_parameters(self, parameters, options):
         self.db_user = parameters.get('user')
         self.db_host = parameters.get('host')
         self.db_port = parameters.get('port', 5432)
         self.db_name = parameters.get('dbname')
         self.db_search_path = parameters.get('search_path', ['public'])
         self._db_password = parameters.get('password')
+        self.db_options = options
 
     def _get_engine_and_table_model(self):
         """
@@ -296,10 +302,15 @@ class PostgreSQLProvider(BaseProvider):
                 port=self.db_port,
                 database=self.db_name
             )
+            conn_args = {
+                'client_encoding': 'utf8',
+                'application_name': 'pygeoapi'
+            }
+            if self.db_options:
+                conn_args.update(self.db_options)
             engine = create_engine(
                 conn_str,
-                connect_args={'client_encoding': 'utf8',
-                              'application_name': 'pygeoapi'},
+                connect_args=conn_args,
                 pool_pre_ping=True)
             _ENGINE_STORE[engine_store_key] = engine
 
@@ -486,3 +497,40 @@ class PostgreSQLProvider(BaseProvider):
         else:
             crs_transform = None
         return crs_transform
+
+    def _modify_pygeofilter(
+            self,
+            ast_tree: pygeofilter.ast.Node,
+    ) -> pygeofilter.ast.Node:
+        """
+        Prepare the input pygeofilter for querying the database.
+
+        Returns a new ``pygeofilter.ast.Node`` object that can be used for
+        querying the database.
+        """
+        new_tree = deepcopy(ast_tree)
+        _inplace_replace_geometry_filter_name(new_tree, self.geom)
+        return new_tree
+
+
+def _inplace_replace_geometry_filter_name(
+        node: pygeofilter.ast.Node,
+        geometry_column_name: str
+):
+    """Recursively traverse node tree and rename nodes of type ``Attribute``.
+
+    Nodes of type ``Attribute`` named ``geometry`` are renamed to the value of
+    the ``geometry_column_name`` parameter.
+    """
+    try:
+        sub_nodes = node.get_sub_nodes()
+    except AttributeError:
+        pass
+    else:
+        for sub_node in sub_nodes:
+            is_attribute_node = isinstance(sub_node, pygeofilter.ast.Attribute)
+            if is_attribute_node and sub_node.name == "geometry":
+                sub_node.name = geometry_column_name
+            else:
+                _inplace_replace_geometry_filter_name(
+                    sub_node, geometry_column_name)

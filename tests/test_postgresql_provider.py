@@ -44,7 +44,9 @@ import pytest
 import pyproj
 from http import HTTPStatus
 
+import pygeofilter.ast
 from pygeofilter.parsers.ecql import parse
+from pygeofilter.values import Geometry
 
 from pygeoapi.api import API
 
@@ -76,18 +78,36 @@ def config():
                  'password': PASSWORD,
                  'search_path': ['osm', 'public']
                  },
+        'options': {
+                        'connect_timeout': 10
+                   },
         'id_field': 'osm_id',
         'table': 'hotosm_bdi_waterways',
         'geom_field': 'foo_geom'
     }
 
 
+@pytest.fixture()
+def openapi():
+    with open(get_test_file_path('pygeoapi-test-openapi.yml')) as fh:
+        return yaml_load(fh)
+
+
 # API using PostgreSQL provider
 @pytest.fixture()
-def pg_api_():
+def pg_api_(openapi):
     with open(get_test_file_path('pygeoapi-test-config-postgresql.yml')) as fh:
         config = yaml_load(fh)
-        return API(config)
+        return API(config, openapi)
+
+
+def test_valid_connection_options(config):
+    if config.get('options'):
+        keys = list(config['options'].keys())
+        for key in keys:
+            assert key in ['connect_timeout', 'tcp_user_timeout', 'keepalives',
+                           'keepalives_idle', 'keepalives_count',
+                           'keepalives_interval']
 
 
 def test_query(config):
@@ -254,24 +274,24 @@ def test_get_not_existing_item_raise_exception(config):
 
 
 @pytest.mark.parametrize('cql, expected_ids', [
-  ("osm_id BETWEEN 80800000 AND 80900000",
-   [80827787, 80827793, 80835468, 80835470, 80835472, 80835474,
-    80835475, 80835478, 80835483, 80835486]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND waterway = 'stream'",
-   [80835470]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND waterway ILIKE 'sTrEam'",
-   [80835470]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND waterway LIKE 's%'",
-   [80835470]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND name IN ('Muhira', 'Mpanda')",
-   [80835468, 80835472, 80835475, 80835478]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND name IS NULL",
-   [80835474, 80835483]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND BBOX(foo_geom, 29, -2.8, 29.2, -2.9)",  # noqa
-   [80827793, 80835470, 80835472, 80835483, 80835489]),
-  ("osm_id BETWEEN 80800000 AND 80900000 AND "
-   "CROSSES(foo_geom,  LINESTRING(29.091 -2.731, 29.253 -2.845))",
-   [80835470, 80835472, 80835489])
+    ("osm_id BETWEEN 80800000 AND 80900000",
+        [80827787, 80827793, 80835468, 80835470, 80835472, 80835474,
+         80835475, 80835478, 80835483, 80835486]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND waterway = 'stream'",
+        [80835470]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND waterway ILIKE 'sTrEam'",
+        [80835470]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND waterway LIKE 's%'",
+        [80835470]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND name IN ('Muhira', 'Mpanda')",
+        [80835468, 80835472, 80835475, 80835478]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND name IS NULL",
+        [80835474, 80835483]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND BBOX(foo_geom, 29, -2.8, 29.2, -2.9)",  # noqa
+        [80827793, 80835470, 80835472, 80835483, 80835489]),
+    ("osm_id BETWEEN 80800000 AND 80900000 AND "
+        "CROSSES(foo_geom,  LINESTRING(29.091 -2.731, 29.253 -2.845))",
+        [80835470, 80835472, 80835489])
 ])
 def test_query_cql(config, cql, expected_ids):
     """Test a variety of CQL queries"""
@@ -730,3 +750,69 @@ def test_get_collection_items_postgresql_automap_naming_conflicts(pg_api_):
     assert code == HTTPStatus.OK
     features = json.loads(response).get('features')
     assert len(features) == 0
+
+
+@pytest.mark.parametrize('original_filter, expected', [
+    pytest.param(
+        "INTERSECTS(geometry, POINT(1 1))",
+        pygeofilter.ast.GeometryIntersects(
+            pygeofilter.ast.Attribute(name='custom_geom_name'),
+            Geometry({'type': 'Point', 'coordinates': (1, 1)})
+        ),
+        id='unnested-geometry'
+    ),
+    pytest.param(
+        "some_attribute = 10 AND INTERSECTS(geometry, POINT(1 1))",
+        pygeofilter.ast.And(
+            pygeofilter.ast.Equal(
+                pygeofilter.ast.Attribute(name='some_attribute'), 10),
+            pygeofilter.ast.GeometryIntersects(
+                pygeofilter.ast.Attribute(name='custom_geom_name'),
+                Geometry({'type': 'Point', 'coordinates': (1, 1)})
+            ),
+        ),
+        id='nested-geometry'
+    ),
+    pytest.param(
+        "(some_attribute = 10 AND INTERSECTS(geometry, POINT(1 1))) OR "
+        "DWITHIN(geometry, POINT(2 2), 10, meters)",
+        pygeofilter.ast.Or(
+            pygeofilter.ast.And(
+                pygeofilter.ast.Equal(
+                    pygeofilter.ast.Attribute(name='some_attribute'), 10),
+                pygeofilter.ast.GeometryIntersects(
+                    pygeofilter.ast.Attribute(name='custom_geom_name'),
+                    Geometry({'type': 'Point', 'coordinates': (1, 1)})
+                ),
+            ),
+            pygeofilter.ast.DistanceWithin(
+                pygeofilter.ast.Attribute(name='custom_geom_name'),
+                Geometry({'type': 'Point', 'coordinates': (2, 2)}),
+                distance=10,
+                units='meters',
+            )
+        ),
+        id='complex-filter'
+    ),
+])
+def test_modify_pygeofilter(original_filter, expected):
+
+    class _CustomPostgreSqlProvider(PostgreSQLProvider):
+        """This is a subclass of the original PostgreSQLProvider.
+
+        The current test is only interested in verifying the correctness of
+        the logic that modifies the parsed filter. As such, in order
+        to simplify instantiating the postgresql pygeoapi provider, and
+        in order to avoid dealing with mocking out the sqlalchemy table
+        reflection mechanism, this class overrides the __init__() method
+        and can be used to test the implementation of the base class'
+        `self._modify_pygeofilter()` method, which is really all we want
+        to test here.
+        """
+        def __init__(self):
+            self.geom = 'custom_geom_name'
+
+    provider = _CustomPostgreSqlProvider()
+    parsed_filter = parse(original_filter)
+    result = provider._modify_pygeofilter(parsed_filter)
+    assert result == expected

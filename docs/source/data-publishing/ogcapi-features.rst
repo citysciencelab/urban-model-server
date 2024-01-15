@@ -26,6 +26,7 @@ parameters.
    `GeoJSON`_,✅/✅,results/hits,❌,❌,❌,✅,❌,❌,✅
    `MongoDB`_,✅/❌,results,✅,✅,✅,✅,❌,❌,✅
    `OGR`_,✅/❌,results/hits,✅,❌,❌,✅,❌,❌,✅
+   `Oracle`_,✅/✅,results/hits,✅,❌,✅,✅,❌,❌,✅
    `PostgreSQL`_,✅/✅,results/hits,✅,✅,✅,✅,✅,❌,✅
    `SQLiteGPKG`_,✅/❌,results/hits,✅,❌,❌,✅,❌,❌,✅
    `SensorThings API`_,✅/✅,results/hits,✅,✅,✅,✅,❌,❌,✅
@@ -109,7 +110,17 @@ To publish an Elasticsearch index, the following are required in your index:
          id_field: geonameid
          time_field: datetimefield
 
-This provider has the support for the CQL queries as indicated in the table above.
+.. note::
+
+   For Elasticseach indexes that are password protect, a RFC1738 URL can be used as follows:
+
+   ``data: http://username:password@localhost:9200/ne_110m_populated_places_simple``
+
+   To further conceal authentication credentials, environment variables can be used:
+
+   ``data: http://${MY_USERNAME}:${MY_PASSWORD}@localhost:9200/ne_110m_populated_places_simple``
+
+The ES provider also has the support for the CQL queries as indicated in the table above.
 
 .. seealso::
   :ref:`cql` for more details on how to use Common Query Language (CQL) to filter the collection with specific queries.
@@ -248,6 +259,14 @@ MongoDB
 .. note::
    Mongo 5 or greater is supported.
 
+`MongoDB <https://www.mongodb.com/>`_ is a powerful and versatile NoSQL database that provides numerous advantages, making it a preferred choice for many applications. One of the main reasons to use MongoDB is its ability to handle large volumes of unstructured data, making it ideal for managing diverse data types such as text, geospatial, and multimedia data. Additionally, MongoDB's flexible document model allows for easy schema evolution, enabling developers to iterate quickly and adapt to changing requirements.
+
+`GeoJSON <https://www.mongodb.com/docs/manual/reference/geojson/>`_ support is available officially by MongoDB , thus a GeoJSON file can be added to MongoDB using following command
+
+`mongoimport --db test -c points --file "path/to/file.geojson" --jsonArray`
+
+Here `test` is the name of database , `points` is the target collection name.
+
 * each document must be a GeoJSON Feature, with a valid geometry.
 
 .. code-block:: yaml
@@ -258,6 +277,99 @@ MongoDB
          data: mongodb://localhost:27017/testdb
          collection: testplaces
 
+.. _Oracle:
+
+Oracle
+^^^^^^
+
+.. note::
+  Requires Python package oracledb
+
+Connection
+""""""""""
+.. code-block:: yaml
+
+  providers:
+      - type: feature
+        name: OracleDB
+        data:
+            host: 127.0.0.1
+            port: 1521 # defaults to 1521 if not provided
+            service_name: XEPDB1
+            # sid: XEPDB1
+            user: geo_test
+            password: geo_test
+            # external_auth: wallet
+            # tns_name: XEPDB1
+            # tns_admin /opt/oracle/client/network/admin 
+            # init_oracle_client: True
+
+        id_field: id
+        table: lakes
+        geom_field: geometry
+        title_field: name
+
+The provider supports connection over host and port with SID, SERVICE_NAME or TNS_NAME. For TNS naming, the system 
+environment variable TNS_ADMIN or the configuration parameter tns_admin must be set.
+
+The providers supports external authentication. At the moment only wallet authentication is implemented.
+
+Sometimes it is necessary to use the Oracle client for the connection. In this case init_oracle_client must be set to True.
+
+SDO options
+"""""""""""
+.. code-block:: yaml
+
+  providers:
+      - type: feature
+        name: OracleDB
+        data:
+            host: 127.0.0.1
+            port: 1521
+            service_name: XEPDB1
+            user: geo_test
+            password: geo_test
+        id_field: id
+        table: lakes
+        geom_field: geometry
+        title_field: name
+        sdo_operator: sdo_relate # defaults to sdo_filter
+        sdo_param: mask=touch+coveredby # defaults to mask=anyinteract
+        
+The provider supports two different SDO operators, sdo_filter and sdo_relate. When not set, the default is sdo_relate!
+Further more  it is possible to set the sdo_param option. When sdo_relate is used the default is anyinteraction!
+`See Oracle Documentation for details <https://docs.oracle.com/en/database/oracle/oracle-database/23/spatl/spatial-operators-reference.html>`_.
+
+Mandatory properties
+""""""""""""""""""""
+.. code-block:: yaml
+
+  providers:
+      - type: feature
+        name: OracleDB
+        data:
+            host: 127.0.0.1
+            port: 1521
+            service_name: XEPDB1
+            user: geo_test
+            password: geo_test
+        id_field: id
+        table: lakes
+        geom_field: geometry
+        title_field: name
+        manadory_properties:
+        - example_group_id
+
+On large tables it could be useful to disallow a query on the complete dataset. For this reason it is possible to 
+configure mandatory properties. When this is activated, the provoder throws an exception when the parameter
+is not in the query uri.
+
+Custom SQL Manipulator Plugin
+"""""""""""""""""""""""""""""
+The provider supports a SQL-Manipulator-Plugin class. With this, the SQL statement could be manipulated. This is
+useful e.g. for authorization at row level or manipulation of the explain plan with hints. 
+
+An example an more informations about that feature you can find in the test class in tests/test_oracle_provider.py.
 
 .. _PostgreSQL:
 
@@ -284,6 +396,43 @@ Must have PostGIS installed.
              user: postgres
              password: postgres
              search_path: [osm, public]
+         id_field: osm_id
+         table: hotosm_bdi_waterways
+         geom_field: foo_geom
+
+A number of database connection options can be also configured in the provider in order to adjust properly the sqlalchemy engine client.
+These are optional and if not specified, the default from the engine will be used. Please see also `SQLAlchemy docs <https://docs.sqlalchemy.org/en/14/core/engines.html#custom-dbapi-connect-arguments-on-connect-routines>`_.
+
+.. code-block:: yaml
+
+    providers:
+       - type: feature
+         name: PostgreSQL
+         data:
+             host: 127.0.0.1
+             port: 3010 # Default 5432 if not provided
+             dbname: test
+             user: postgres
+             password: postgres
+             search_path: [osm, public]
+         options:
+             # Maximum time to wait while connecting, in seconds.
+             connect_timeout: 10
+             # Number of *milliseconds* that transmitted data may remain
+             # unacknowledged before a connection is forcibly closed.
+             tcp_user_timeout: 10000
+             # Whether client-side TCP keepalives are used. 1 = use keepalives,
+             # 0 = don't use keepalives.
+             keepalives: 1
+             # Number of seconds of inactivity after which TCP should send a
+             # keepalive message to the server.
+             keepalives_idle: 5
+             # Number of TCP keepalives that can be lost before the client's
+             # connection to the server is considered dead.
+             keepalives_count: 5
+             # Number of seconds after which a TCP keepalive message that is not
+             # acknowledged by the server should be retransmitted.
+             keepalives_interval: 1
          id_field: osm_id
          table: hotosm_bdi_waterways
          geom_field: foo_geom

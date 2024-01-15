@@ -50,13 +50,19 @@ from starlette.responses import (
 import uvicorn
 
 from pygeoapi.api import API
-from pygeoapi.util import yaml_load, get_api_rules
+from pygeoapi.openapi import load_openapi_document
+from pygeoapi.config import get_config
+from pygeoapi.util import get_api_rules
 
-if 'PYGEOAPI_CONFIG' not in os.environ:
-    raise RuntimeError('PYGEOAPI_CONFIG environment variable not set')
+CONFIG = get_config()
 
-with open(os.environ.get('PYGEOAPI_CONFIG'), encoding='utf8') as fh:
-    CONFIG = yaml_load(fh)
+if 'PYGEOAPI_OPENAPI' not in os.environ:
+    raise RuntimeError('PYGEOAPI_OPENAPI environment variable not set')
+
+OPENAPI = load_openapi_document()
+
+if CONFIG['server'].get('admin'):
+    from pygeoapi.admin import Admin
 
 p = Path(__file__)
 
@@ -70,7 +76,7 @@ except KeyError:
 
 API_RULES = get_api_rules(CONFIG)
 
-api_ = API(CONFIG)
+api_ = API(CONFIG, OPENAPI)
 
 
 def get_response(result: tuple) -> Union[Response, JSONResponse, HTMLResponse]:
@@ -116,13 +122,7 @@ async def openapi(request: Request):
 
     :returns: Starlette HTTP Response
     """
-    with open(os.environ.get('PYGEOAPI_OPENAPI'), encoding='utf8') as ff:
-        if os.environ.get('PYGEOAPI_OPENAPI').endswith(('.yaml', '.yml')):
-            openapi_ = yaml_load(ff)
-        else:  # JSON file, do not transform
-            openapi_ = ff
-
-    return get_response(api_.openapi(request, openapi_))
+    return get_response(api_.openapi_(request))
 
 
 async def conformance(request: Request):
@@ -479,6 +479,56 @@ async def stac_catalog_path(request: Request):
     return get_response(api_.get_stac_path(request, path))
 
 
+async def admin_config(request: Request):
+    """
+    Admin endpoint
+
+    :returns: Starlette HTTP Response
+    """
+
+    if request.method == 'GET':
+        return get_response(ADMIN.get_config(request))
+    elif request.method == 'PUT':
+        return get_response(ADMIN.put_config(request))
+    elif request.method == 'PATCH':
+        return get_response(ADMIN.patch_config(request))
+
+
+async def admin_config_resources(request: Request):
+    """
+    Resources endpoint
+
+    :returns: HTTP response
+    """
+
+    if request.method == 'GET':
+        return get_response(ADMIN.get_resources(request))
+    elif request.method == 'POST':
+        return get_response(ADMIN.put_resource(request))
+
+
+async def admin_config_resource(request: Request, resource_id: str):
+    """
+    Resource endpoint
+
+    :param resource_id: resource identifier
+
+    :returns: Starlette HTTP Response
+    """
+
+    if 'resource_id' in request.path_params:
+        resource_id = request.path_params['resource_id']
+
+    if request.method == 'GET':
+        return get_response(ADMIN.get_resource(request, resource_id))
+    elif request.method == 'PUT':
+        return get_response(ADMIN.put_resource(request, resource_id))
+    elif request.method == 'PATCH':
+        return get_response(ADMIN.patch_resource(request, resource_id))
+    elif request.method == 'DELETE':
+        return get_response(ADMIN.delete_resource(request, resource_id))
+
+
 class ApiRulesMiddleware:
     """ Custom middleware to properly deal with trailing slashes.
     See https://github.com/encode/starlette/issues/869.
@@ -552,6 +602,17 @@ api_routes = [
     Route('/stac', stac_catalog_root),
     Route('/stac/{path:path}', stac_catalog_path),
 ]
+
+admin_routes = [
+    Route('/admin/config', admin_config, methods=['GET', 'PUT', 'PATCH']),
+    Route('/admin/config/resources', admin_config_resources, methods=['GET', 'POST']),  # noqa
+    Route('/admin/config/resources/{resource_id:path}', admin_config_resource,
+          methods=['GET', 'PUT', 'PATCH', 'DELETE'])
+]
+
+if CONFIG['server'].get('admin', False):
+    ADMIN = Admin(CONFIG, OPENAPI)
+    api_routes.extend(admin_routes)
 
 url_prefix = API_RULES.get_url_prefix('starlette')
 APP = Starlette(

@@ -73,13 +73,8 @@ from pygeoapi.process.manager.base import get_manager
 from pygeoapi.plugin import load_plugin, PLUGINS
 from pygeoapi.provider.base import (
     ProviderGenericError, ProviderConnectionError, ProviderNotFoundError,
-    ProviderInvalidDataError, ProviderInvalidQueryError, ProviderNoDataError,
-    ProviderQueryError, ProviderItemNotFoundError, ProviderTypeError,
-    ProviderRequestEntityTooLargeError)
+    ProviderTypeError)
 
-from pygeoapi.provider.tile import (ProviderTileNotFoundError,
-                                    ProviderTileQueryError,
-                                    ProviderTilesetIdNotFoundError)
 from pygeoapi.models.cql import CQLModel
 from pygeoapi.util import (dategetter, RequestedProcessExecutionMode,
                            DATETIME_FORMAT, UrlPrefetcher,
@@ -107,6 +102,7 @@ F_JSONLD = 'jsonld'
 F_GZIP = 'gzip'
 F_PNG = 'png'
 F_MVT = 'mvt'
+F_NETCDF = 'NetCDF'
 
 #: Formats allowed for ?f= requests (order matters for complex MIME types)
 FORMAT_TYPES = OrderedDict((
@@ -114,7 +110,8 @@ FORMAT_TYPES = OrderedDict((
     (F_JSONLD, 'application/ld+json'),
     (F_JSON, 'application/json'),
     (F_PNG, 'image/png'),
-    (F_MVT, 'application/vnd.mapbox-vector-tile')
+    (F_MVT, 'application/vnd.mapbox-vector-tile'),
+    (F_NETCDF, 'application/x-netcdf'),
 ))
 
 #: Locale used for system responses (e.g. exceptions)
@@ -641,16 +638,18 @@ class APIRequest:
 class API:
     """API object"""
 
-    def __init__(self, config):
+    def __init__(self, config, openapi):
         """
         constructor
 
         :param config: configuration dict
+        :param openapi: openapi dict
 
         :returns: `pygeoapi.API` instance
         """
 
         self.config = config
+        self.openapi = openapi
         self.api_headers = get_api_rules(self.config).response_headers
         self.base_url = get_base_url(self.config)
         self.prefetcher = UrlPrefetcher()
@@ -792,8 +791,8 @@ class API:
 
     @gzip
     @pre_process
-    def openapi(self, request: Union[APIRequest, Any],
-                openapi) -> Tuple[dict, int, str]:
+    def openapi_(self, request: Union[APIRequest, Any]) -> Tuple[
+                 dict, int, str]:
         """
         Provide OpenAPI document
 
@@ -823,10 +822,11 @@ class API:
 
         headers['Content-Type'] = 'application/vnd.oai.openapi+json;version=3.0'  # noqa
 
-        if isinstance(openapi, dict):
-            return headers, HTTPStatus.OK, to_json(openapi, self.pretty_print)
+        if isinstance(self.openapi, dict):
+            return headers, HTTPStatus.OK, to_json(self.openapi,
+                                                   self.pretty_print)
         else:
-            return headers, HTTPStatus.OK, openapi
+            return headers, HTTPStatus.OK, self.openapi
 
     @gzip
     @pre_process
@@ -1179,41 +1179,37 @@ class API:
 
             try:
                 edr = get_provider_by_type(v['providers'], 'edr')
+                p = load_plugin('provider', edr)
+            except ProviderConnectionError:
+                msg = 'connection error (check logs)'
+                return self.get_exception(
+                    HTTPStatus.INTERNAL_SERVER_ERROR, headers,
+                    request.format, 'NoApplicableCode', msg)
             except ProviderTypeError:
                 edr = None
 
-            if edr and dataset is not None:
+            if edr:
                 # TODO: translate
                 LOGGER.debug('Adding EDR links')
-                try:
-                    p = load_plugin('provider', get_provider_by_type(
-                        self.config['resources'][dataset]['providers'], 'edr'))
-                    parameters = p.get_fields()
-                    if parameters:
-                        collection['parameter-names'] = {}
-                        for f in parameters['field']:
-                            collection['parameter-names'][f['id']] = f
+                parameters = p.get_fields()
+                if parameters:
+                    collection['parameter_names'] = {}
+                    for f in parameters['field']:
+                        collection['parameter_names'][f['id']] = f
 
-                    for qt in p.get_query_types():
-                        collection['links'].append({
-                            'type': 'application/json',
-                            'rel': 'data',
-                            'title': f'{qt} query for this collection as JSON',
-                            'href': f'{self.get_collections_url()}/{k}/{qt}?f={F_JSON}'  # noqa
-                        })
-                        collection['links'].append({
-                            'type': FORMAT_TYPES[F_HTML],
-                            'rel': 'data',
-                            'title': f'{qt} query for this collection as HTML',
-                            'href': f'{self.get_collections_url()}/{k}/{qt}?f={F_HTML}'  # noqa
-                        })
-                except ProviderConnectionError:
-                    msg = 'connection error (check logs)'
-                    return self.get_exception(
-                        HTTPStatus.INTERNAL_SERVER_ERROR, headers,
-                        request.format, 'NoApplicableCode', msg)
-                except ProviderTypeError:
-                    pass
+                for qt in p.get_query_types():
+                    collection['links'].append({
+                        'type': 'application/json',
+                        'rel': 'data',
+                        'title': f'{qt} query for this collection as JSON',
+                        'href': f'{self.get_collections_url()}/{k}/{qt}?f={F_JSON}'  # noqa
+                    })
+                    collection['links'].append({
+                        'type': FORMAT_TYPES[F_HTML],
+                        'rel': 'data',
+                        'title': f'{qt} query for this collection as HTML',
+                        'href': f'{self.get_collections_url()}/{k}/{qt}?f={F_HTML}'  # noqa
+                    })
 
             if dataset is not None and k == dataset:
                 fcm = collection
@@ -1303,16 +1299,11 @@ class API:
             LOGGER.debug('Loading record provider')
             p = load_plugin('provider', get_provider_by_type(
                 self.config['resources'][dataset]['providers'], 'record'))
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         queryables = {
             'type': 'object',
@@ -1484,16 +1475,11 @@ class API:
                 return self.get_exception(
                     HTTPStatus.BAD_REQUEST, headers, request.format,
                     'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         crs_transform_spec = None
         if provider_type == 'feature':
@@ -1655,24 +1641,11 @@ class API:
                               select_properties=select_properties,
                               crs_transform_spec=crs_transform_spec,
                               q=q, language=prv_locale, filterq=filter_)
-        except ProviderConnectionError as err:
-            LOGGER.error(err)
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError as err:
-            LOGGER.error(err)
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
         except ProviderGenericError as err:
             LOGGER.error(err)
-            msg = 'generic error (check logs)'
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         serialized_query_params = ''
         for k, v in request.params.items():
@@ -1711,15 +1684,17 @@ class API:
                     'href': f'{uri}?offset={prev}{serialized_query_params}'
                 })
 
-        if len(content['features']) == limit:
-            next_ = offset + limit
-            content['links'].append(
-                {
-                    'type': 'application/geo+json',
-                    'rel': 'next',
-                    'title': 'items (next)',
-                    'href': f'{uri}?offset={next_}{serialized_query_params}'
-                })
+        if 'numberMatched' in content:
+            if content['numberMatched'] > (limit + offset):
+                next_ = offset + limit
+                next_href = f'{uri}?offset={next_}{serialized_query_params}'
+                content['links'].append(
+                    {
+                        'type': 'application/geo+json',
+                        'rel': 'next',
+                        'title': 'items (next)',
+                        'href': next_href
+                    })
 
         content['links'].append(
             {
@@ -1924,16 +1899,11 @@ class API:
                 return self.get_exception(
                     HTTPStatus.BAD_REQUEST, headers, request.format,
                     'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         LOGGER.debug('processing property parameters')
         for k, v in request.params.items():
@@ -2057,7 +2027,7 @@ class API:
         else:
             LOGGER.debug('processing Elasticsearch CQL_JSON data')
             try:
-                filter_ = CQLModel.parse_raw(data)
+                filter_ = CQLModel.model_validate_json(data)
             except Exception as err:
                 LOGGER.error(err)
                 msg = f'Bad CQL string : {data}'
@@ -2074,24 +2044,11 @@ class API:
                               skip_geometry=skip_geometry,
                               q=q,
                               filterq=filter_)
-        except ProviderConnectionError as err:
-            LOGGER.error(err)
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError as err:
-            LOGGER.error(err)
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
         except ProviderGenericError as err:
             LOGGER.error(err)
-            msg = 'generic error (check logs)'
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         return headers, HTTPStatus.OK, to_json(content, self.pretty_print)
 
@@ -2171,11 +2128,16 @@ class API:
             LOGGER.debug('Creating item')
             try:
                 identifier = p.create(request.data)
-            except (ProviderInvalidDataError, TypeError) as err:
+            except TypeError as err:
                 msg = str(err)
                 return self.get_exception(
                     HTTPStatus.BAD_REQUEST, headers, request.format,
                     'InvalidParameterValue', msg)
+            except ProviderGenericError as err:
+                LOGGER.error(err)
+                return self.get_exception(
+                    err.http_status_code, headers, request.format,
+                    err.ogc_exception_code, err.message)
 
             headers['Location'] = f'{self.get_collections_url()}/{dataset}/items/{identifier}'  # noqa
 
@@ -2185,11 +2147,16 @@ class API:
             LOGGER.debug('Updating item')
             try:
                 _ = p.update(identifier, request.data)
-            except (ProviderInvalidDataError, TypeError) as err:
+            except TypeError as err:
                 msg = str(err)
                 return self.get_exception(
                     HTTPStatus.BAD_REQUEST, headers, request.format,
                     'InvalidParameterValue', msg)
+            except ProviderGenericError as err:
+                LOGGER.error(err)
+                return self.get_exception(
+                    err.http_status_code, headers, request.format,
+                    err.ogc_exception_code, err.message)
 
             return headers, HTTPStatus.NO_CONTENT, ''
 
@@ -2198,10 +2165,10 @@ class API:
             try:
                 _ = p.delete(identifier)
             except ProviderGenericError as err:
-                msg = str(err)
+                LOGGER.error(err)
                 return self.get_exception(
-                    HTTPStatus.BAD_REQUEST, headers, request.format,
-                    'InvalidParameterValue', msg)
+                    err.http_status_code, headers, request.format,
+                    err.ogc_exception_code, err.message)
 
             return headers, HTTPStatus.OK, ''
 
@@ -2255,16 +2222,11 @@ class API:
                 return self.get_exception(
                     HTTPStatus.BAD_REQUEST, headers, request.format,
                     'InvalidParameterValue', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         crs_transform_spec = None
         if provider_type == 'feature':
@@ -2293,28 +2255,11 @@ class API:
                 language=prv_locale,
                 crs_transform_spec=crs_transform_spec,
             )
-        except ProviderConnectionError as err:
-            LOGGER.error(err)
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderItemNotFoundError:
-            msg = 'identifier not found'
-            return self.get_exception(HTTPStatus.NOT_FOUND, headers,
-                                      request.format, 'NotFound', msg)
-        except ProviderQueryError as err:
-            LOGGER.error(err)
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
         except ProviderGenericError as err:
             LOGGER.error(err)
-            msg = 'generic error (check logs)'
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         if content is None:
             msg = 'identifier not found'
@@ -2418,11 +2363,10 @@ class API:
         """
 
         query_args = {}
-        format_ = F_JSON
+        format_ = request.format or F_JSON
 
         # Force response content type and language (en-US only) headers
         headers = request.get_response_headers(SYSTEM_LOCALE,
-                                               FORMAT_TYPES[F_JSON],
                                                **self.api_headers)
 
         LOGGER.debug('Loading provider')
@@ -2436,16 +2380,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers, format_,
                 'InvalidParameterValue', msg)
-        except ProviderTypeError:
-            msg = 'invalid provider type'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.BAD_REQUEST, headers, format_,
-                'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         LOGGER.debug('Processing bbox parameter')
 
@@ -2484,10 +2423,7 @@ class API:
                 'InvalidParameterValue', msg)
 
         query_args['datetime_'] = datetime_
-
-        if 'f' in request.params:
-            # Format explicitly set using a query parameter
-            query_args['format_'] = format_ = request.format
+        query_args['format_'] = format_
 
         properties = request.params.get('properties')
         if properties:
@@ -2527,21 +2463,11 @@ class API:
         LOGGER.debug('Querying coverage')
         try:
             data = p.query(**query_args)
-        except ProviderInvalidQueryError as err:
-            msg = f'query error: {err}'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.BAD_REQUEST, headers, format_,
-                'InvalidParameterValue', msg)
-        except ProviderNoDataError:
-            msg = 'No data found'
-            return self.get_exception(
-                HTTPStatus.NO_CONTENT, headers, format_,
-                'InvalidParameterValue', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         mt = collection_def['format']['name']
         if format_ == mt:  # native format
@@ -2588,16 +2514,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers, format_,
                 'InvalidParameterValue', msg)
-        except ProviderTypeError:
-            msg = 'invalid provider type'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         if format_ == F_JSON:
             return headers, HTTPStatus.OK, to_json(data, self.pretty_print)
@@ -2645,16 +2566,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.NOT_FOUND, headers, format_,
                 'InvalidParameterValue', msg)
-        except ProviderTypeError:
-            msg = 'invalid provider type'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         if format_ == F_JSON:
             return headers, HTTPStatus.OK, to_json(data, self.pretty_print)
@@ -2708,16 +2624,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         tiles = {
             'links': [],
@@ -2858,33 +2769,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.BAD_REQUEST, headers, format_,
                 'InvalidParameterValue', msg)
-        except ProviderConnectionError as err:
-            LOGGER.error(err)
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
-        except ProviderTilesetIdNotFoundError:
-            msg = 'Tileset id not found'
-            return self.get_exception(
-                HTTPStatus.NOT_FOUND, headers, format_, 'NotFound', msg)
-        except ProviderTileQueryError as err:
-            LOGGER.error(err)
-            msg = 'Tile not found'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
-        except ProviderTileNotFoundError as err:
-            LOGGER.error(err)
-            msg = 'Tile not found (check logs)'
-            return self.get_exception(
-                HTTPStatus.NOT_FOUND, headers, format_, 'NoMatch', msg)
         except ProviderGenericError as err:
             LOGGER.error(err)
-            msg = 'Generic error (check logs)'
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, format_,
-                'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
     @gzip
     @pre_process
@@ -2924,16 +2813,11 @@ class API:
             return self.get_exception(
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'InvalidParameterValue', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'InvalidParameterValue', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         # Get provider language (if any)
         prv_locale = l10n.get_plugin_locale(t, request.raw_locale)
@@ -3025,24 +2909,11 @@ class API:
             LOGGER.error(exception)
             return headers, HTTPStatus.NOT_FOUND, to_json(
                 exception, self.pretty_print)
-        except ProviderTypeError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'invalid provider type'
-            }
-            headers['Content-type'] = 'application/json'
-            LOGGER.error(exception)
-            return headers, HTTPStatus.BAD_REQUEST, to_json(
-                exception, self.pretty_print)
-        except ProviderConnectionError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'connection error (check logs)'
-            }
-            headers['Content-type'] = 'application/json'
-            LOGGER.error(exception)
-            return headers, HTTPStatus.INTERNAL_SERVER_ERROR, to_json(
-                exception, self.pretty_print)
+        except ProviderGenericError as err:
+            LOGGER.error(err)
+            return self.get_exception(
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         query_args['format_'] = request.params.get('f', 'png')
         query_args['style'] = style
@@ -3102,33 +2973,11 @@ class API:
         LOGGER.debug('Generating map')
         try:
             data = p.query(**query_args)
-        except ProviderInvalidQueryError as err:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': f'query error: {err}'
-            }
-            LOGGER.error(exception)
-            headers['Content-type'] = 'application/json'
-            return headers, HTTPStatus.BAD_REQUEST, to_json(
-                exception, self.pretty_print)
-        except ProviderNoDataError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'No data found'
-            }
-            LOGGER.debug(exception)
-            headers['Content-type'] = 'application/json'
-            return headers, HTTPStatus.NO_CONTENT, to_json(
-                exception, self.pretty_print)
-        except ProviderQueryError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'query error (check logs)'
-            }
-            LOGGER.error(exception)
-            headers['Content-type'] = 'application/json'
-            return headers, HTTPStatus.INTERNAL_SERVER_ERROR, to_json(
-                exception, self.pretty_print)
+        except ProviderGenericError as err:
+            LOGGER.error(err)
+            return self.get_exception(
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         mt = collection_def['format']['name']
 
@@ -3179,50 +3028,20 @@ class API:
             LOGGER.error(exception)
             return headers, HTTPStatus.NOT_FOUND, to_json(
                 exception, self.pretty_print)
-        except ProviderTypeError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'invalid provider type'
-            }
-            LOGGER.error(exception)
-            return headers, HTTPStatus.BAD_REQUEST, to_json(
-                exception, self.pretty_print)
-        except ProviderConnectionError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'connection error (check logs)'
-            }
-            LOGGER.error(exception)
-            return headers, HTTPStatus.INTERNAL_SERVER_ERROR, to_json(
-                exception, self.pretty_print)
+        except ProviderGenericError as err:
+            LOGGER.error(err)
+            return self.get_exception(
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         LOGGER.debug('Generating legend')
         try:
             data = p.get_legend(style, request.params.get('f', 'png'))
-        except ProviderInvalidQueryError as err:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': f'query error: {err}'
-            }
-            LOGGER.error(exception)
-            return headers, HTTPStatus.BAD_REQUEST, to_json(
-                exception, self.pretty_print)
-        except ProviderNoDataError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'No data found'
-            }
-            LOGGER.debug(exception)
-            return headers, HTTPStatus.NO_CONTENT, to_json(
-                exception, self.pretty_print)
-        except ProviderQueryError:
-            exception = {
-                'code': 'NoApplicableCode',
-                'description': 'query error (check logs)'
-            }
-            LOGGER.error(exception)
-            return headers, HTTPStatus.INTERNAL_SERVER_ERROR, to_json(
-                exception, self.pretty_print)
+        except ProviderGenericError as err:
+            LOGGER.error(err)
+            return self.get_exception(
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         mt = collection_def['format']['name']
 
@@ -3305,7 +3124,7 @@ class API:
                 if process is None:
                     p2.pop('inputs')
                     p2.pop('outputs')
-                    p2.pop('example')
+                    p2.pop('example', None)
 
                 p2['jobControlOptions'] = ['sync-execute']
                 if self.manager.is_async:
@@ -3796,8 +3615,8 @@ class API:
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
 
-        LOGGER.debug('Processing parameter-name parameter')
-        parameternames = request.params.get('parameter-name') or []
+        LOGGER.debug('Processing parameter_names parameter')
+        parameternames = request.params.get('parameter_names') or []
         if isinstance(parameternames, str):
             parameternames = parameternames.split(',')
 
@@ -3843,21 +3662,11 @@ class API:
         try:
             p = load_plugin('provider', get_provider_by_type(
                 collections[dataset]['providers'], 'edr'))
-        except ProviderTypeError:
-            msg = 'invalid provider type'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers,
-                request.format, 'NoApplicableCode', msg)
-        except ProviderConnectionError:
-            msg = 'connection error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers,
-                request.format, 'NoApplicableCode', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers,
-                request.format, 'NoApplicableCode', msg)
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         if instance is not None and not p.get_instance(instance):
             msg = 'Invalid instance identifier'
@@ -3873,7 +3682,7 @@ class API:
 
         if parameternames and not any((fld['id'] in parameternames)
                                       for fld in p.get_fields()['field']):
-            msg = 'Invalid parameter-name'
+            msg = 'Invalid parameter_names'
             return self.get_exception(
                 HTTPStatus.BAD_REQUEST, headers, request.format,
                 'InvalidParameterValue', msg)
@@ -3894,19 +3703,11 @@ class API:
 
         try:
             data = p.query(**query_args)
-        except ProviderNoDataError:
-            msg = 'No data found'
+        except ProviderGenericError as err:
+            LOGGER.error(err)
             return self.get_exception(
-                HTTPStatus.NO_CONTENT, headers, request.format, 'NoMatch', msg)
-        except ProviderQueryError:
-            msg = 'query error (check logs)'
-            return self.get_exception(
-                HTTPStatus.INTERNAL_SERVER_ERROR, headers, request.format,
-                'NoApplicableCode', msg)
-        except ProviderRequestEntityTooLargeError as err:
-            return self.get_exception(
-                HTTPStatus.REQUEST_ENTITY_TOO_LARGE, headers, request.format,
-                'NoApplicableCode', str(err))
+                err.http_status_code, headers, request.format,
+                err.ogc_exception_code, err.message)
 
         if request.format == F_HTML:  # render
             content = render_j2_template(self.tpl_config,
@@ -4052,9 +3853,29 @@ class API:
             if request.format == F_HTML:  # render
                 content['path'] = path
                 if 'assets' in content:  # item view
-                    content = render_j2_template(self.tpl_config,
-                                                 'stac/item.html',
-                                                 content, request.locale)
+                    if content['type'] == 'Collection':
+                        content = render_j2_template(
+                            self.tpl_config,
+                            'stac/collection_base.html',
+                            content,
+                            request.locale
+                        )
+                    elif content['type'] == 'Feature':
+                        content = render_j2_template(
+                            self.tpl_config,
+                            'stac/item.html',
+                            content,
+                            request.locale
+                        )
+                    else:
+                        msg = f'Unknown STAC type {content.type}'
+                        LOGGER.error(msg)
+                        return self.get_exception(
+                            HTTPStatus.INTERNAL_SERVER_ERROR,
+                            headers,
+                            request.format,
+                            'NoApplicableCode',
+                            msg)
                 else:
                     content = render_j2_template(self.tpl_config,
                                                  'stac/catalog.html',
