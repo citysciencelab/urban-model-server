@@ -20,7 +20,7 @@ To start the pygeoapi in local development mode, follow these steps
 1. Adjust the [config-dev.yml](./config-dev.yml) file as necessary
 1. Set the environment variables with ```export PYGEOAPI_CONFIG=config-dev.yml``` and ```export PYGEOAPI_OPENAPI=example-openapi.yml```
 1. Generate the openapi config file by running ```pygeoapi openapi generate $PYGEOAPI_CONFIG > $PYGEOAPI_OPENAPI```
-1. To start the development setup, run ```pygeoapi serve````
+1. To start the development setup, run ```pygeoapi serve```
 
 ## Production Setup
 Make sure to have Docker and Docker Compose installed, adjust the production settings in the [config-prod.yml](./config-prod.yml) file and simply run ```docker-compose up```. 
