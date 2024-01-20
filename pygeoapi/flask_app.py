@@ -36,6 +36,7 @@ import click
 
 from flask import Flask, Blueprint, make_response, request, send_from_directory
 from flask_socketio import SocketIO, emit
+from engineio.payload import Payload
 
 from pygeoapi.admin import Admin
 from pygeoapi.api import API
@@ -56,7 +57,8 @@ if 'templates' in CONFIG['server']:
 APP = Flask(__name__, static_folder=STATIC_FOLDER, static_url_path='/static')
 APP.url_map.strict_slashes = API_RULES.strict_slashes
 
-SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=False, cors_allowed_origins="*")
+Payload.max_decode_packets = 1024 * 1024 * 5 # 5MB
+SOCKETAPP = SocketIO(APP, logger = True, engineio_logger=False, cors_allowed_origins="*", message_queue_limit=1000, max_http_buffer_size=10000000) #10MB als max buffer size
 
 
 
