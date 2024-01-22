@@ -3513,14 +3513,8 @@ class API:
         param mimetype: mimetype of results
 
         """
-
-        # Ensure results are a dict object
-        results_dict = {
-            "results" : results
-            }
-
         
-        return self.manager.get_websocket_results(job_id, process_id, results_dict, mimetype)
+        return self.manager.get_websocket_results(job_id, process_id, results, mimetype)
 
 
 

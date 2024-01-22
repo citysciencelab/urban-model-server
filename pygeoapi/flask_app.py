@@ -32,7 +32,7 @@
 
 import os
 
-import click
+import click, json
 
 from flask import Flask, Blueprint, make_response, request, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -554,6 +554,10 @@ def simulation_results(data):
         mimetype = data['mimetype']
 
         print('Simulation results received: ' + jobID)
+
+        # Convert results into a dict if it is a string
+        if isinstance(results, str):
+            results = json.loads(results)
 
         # Process results
         jfmt, outputs, current_status = api_.get_websocket_results(jobID, processID, results, mimetype)
